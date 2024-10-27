@@ -26,8 +26,8 @@ int servo360_2 = 1;               // Channel for the second 360-degree servo
 int servo180_1 = 2;               // Channel for the first 180-degree servo
 int servo180_2 = 3;               // Channel for the second 180-degree servo
 int angle180_1 = 90;              // Start at middle angle for the first 180-degree servo
-int angle180_2 = 0;              // Start at middle angle for the second 180-degree servo
-int speed360_1 = STOP1_360;       // Initial pulse for 360-degree servo 1
+int angle180_2 = 180;              // Start at middle angle for the second 180-degree servo
+int speed360_1 = STOP1_360;       // Initial pulse for 360-degree servo 1                                                  
 int speed360_2 = STOP2_360;       // Initial pulse for 360-degree servo 2
 int selectedServoChannel = 0;     // Current selected servo channel
 
@@ -115,13 +115,6 @@ void setup() {
     BP32.forgetBluetoothKeys(); // Clear saved Bluetooth keys
 }
 
-// Function to change the LED color of the gamepad
-void changeLEDColor(uint8_t red, uint8_t green, uint8_t blue) {
-    // if (myGamepad) {
-    //     myGamepad->setLED(red, green, blue);
-    // }
-}
-
 void loop() {
     BP32.update();
 
@@ -146,13 +139,13 @@ void handleGamepadInput() {
     prevL2 = currentL2;
 
     if (motorControlMode) {
+        myGamepad->setColorLED(204, 0, 204); // purple for driving
         controlMotors();
     } else {
         controlServos();
     }
 }
 
-// Motor control
 void controlMotors() {
     int leftY = myGamepad->axisY();   // Forward/Backward control
     int rightX = myGamepad->axisRX(); // Turning control
@@ -161,47 +154,73 @@ void controlMotors() {
     int speed = map(abs(leftY), 0, 512, 0, 255) / speedDivider;
     int turningFactor = map(rightX, -512, 512, -255, 255) / speedDivider;
 
+    int motorA_pwm = 0;
+    int motorB_pwm = 0;
+
     if (leftY > 250) { // Backward
-        analogWrite(motorA_enable, constrain(speed - turningFactor, 0, 255));
-        analogWrite(motorB_enable, constrain(speed + turningFactor, 0, 255));
+        // Adjust PWM for turning while moving backward
+        motorA_pwm = constrain(speed - turningFactor, 0, 255);
+        motorB_pwm = constrain(speed + turningFactor, 0, 255);
+        
+        analogWrite(motorA_enable, motorA_pwm);
+        analogWrite(motorB_enable, motorB_pwm);
 
         digitalWrite(motorA_in1, LOW);
         digitalWrite(motorA_in2, HIGH);
         digitalWrite(motorB_in1, LOW);
         digitalWrite(motorB_in2, HIGH);
-        Serial.println("Backward");
+        Serial.println("Backward with Turning");
     } else if (leftY < -250) { // Forward
-        analogWrite(motorA_enable, constrain(speed + turningFactor, 0, 255));
-        analogWrite(motorB_enable, constrain(speed - turningFactor, 0, 255));
+        // Adjust PWM for turning while moving forward
+        motorA_pwm = constrain(speed + turningFactor, 0, 255);
+        motorB_pwm = constrain(speed - turningFactor, 0, 255);
+        
+        analogWrite(motorA_enable, motorA_pwm);
+        analogWrite(motorB_enable, motorB_pwm);
 
         digitalWrite(motorA_in1, HIGH);
         digitalWrite(motorA_in2, LOW);
         digitalWrite(motorB_in1, HIGH);
         digitalWrite(motorB_in2, LOW);
-        Serial.println("Forward");
-    } else if (rightX < -250) { // Turn Left
-        analogWrite(motorA_enable, constrain(abs(turningFactor), 0, 255));
-        analogWrite(motorB_enable, constrain(abs(turningFactor), 0, 255));
+        Serial.println("Forward with Turning");
+    } else if (rightX < -250) { // Turn Left (in place)
+        motorA_pwm = constrain(abs(turningFactor), 0, 255);
+        motorB_pwm = motorA_pwm;  // Use the same PWM value for both motors
+        
+        analogWrite(motorA_enable, motorA_pwm);
+        analogWrite(motorB_enable, motorB_pwm);
 
         digitalWrite(motorA_in1, LOW);
         digitalWrite(motorA_in2, HIGH);
         digitalWrite(motorB_in1, HIGH);
         digitalWrite(motorB_in2, LOW);
-        Serial.println("Turn Left");
-    } else if (rightX > 250) { // Turn Right
-        analogWrite(motorA_enable, constrain(abs(turningFactor), 0, 255));
-        analogWrite(motorB_enable, constrain(abs(turningFactor), 0, 255));
+        Serial.println("Turn Left in Place");
+    } else if (rightX > 250) { // Turn Right (in place)
+        motorA_pwm = constrain(abs(turningFactor), 0, 255);
+        motorB_pwm = motorA_pwm;  // Use the same PWM value for both motors
+        
+        analogWrite(motorA_enable, motorA_pwm);
+        analogWrite(motorB_enable, motorB_pwm);
 
         digitalWrite(motorA_in1, HIGH);
         digitalWrite(motorA_in2, LOW);
         digitalWrite(motorB_in1, LOW);
         digitalWrite(motorB_in2, HIGH);
-        Serial.println("Turn Right");
+        Serial.println("Turn Right in Place");
     } else { // Stop motors
+        motorA_pwm = 0;
+        motorB_pwm = 0;
+        
         analogWrite(motorA_enable, 0);
         analogWrite(motorB_enable, 0);
         Serial.println("Stop");
     }
+
+    // Optional: Print the PWM values of motor A and motor B
+    Serial.print("Motor A PWM: ");
+    Serial.println(motorA_pwm);
+    Serial.print("Motor B PWM: ");
+    Serial.println(motorB_pwm);
 }
 
 // Servo control
@@ -211,6 +230,7 @@ void controlServos() {
     bool currentR2 = myGamepad->r2();
     bool currentSquare = myGamepad->a();  // Stop button
     bool currentR1 = myGamepad->r1();     // Channel change using R1
+
 
     // Rotate all servos clockwise when D-pad up is pressed
     if (currentDpadUp) {
@@ -229,6 +249,16 @@ void controlServos() {
         Serial.println("Stopped servos after D-pad Down released.");
     }
     prevDpadDown = currentDpadDown;
+
+    if (selectedServoChannel == 0){
+       myGamepad->setColorLED(0, 0, 255); // blue  
+    }else if (selectedServoChannel == 1){
+       myGamepad->setColorLED(0, 255, 0); // green
+    }else if (selectedServoChannel == 2){
+       myGamepad->setColorLED(255, 255, 0); // yellow
+    }else{
+       myGamepad->setColorLED(255, 0, 0); // red
+    }
 
     // Switch between servo channels using R2
     if (currentR2 && !prevR2) {
@@ -305,7 +335,7 @@ void rotateAllServosClockwise() {
             Serial.println("Rotating 180-degree servo 1 clockwise.");
             break;
         case 3:
-            angle180_2 = min(37, angle180_2 + 1);  // Increase angle for 180-degree servo 2
+            angle180_2 = min(180, angle180_2 + 1);  // Increase angle for 180-degree servo 2
             pwm.setPWM(servo180_2, 0, map(angle180_2, 0, 180, SERVOMIN_180, SERVOMAX_180));  // Update PWM for 180-degree servo 2
             Serial.println("Rotating 180-degree servo 2 clockwise.");
             Serial.println(angle180_2);
@@ -331,7 +361,7 @@ void rotateAllServosCounterclockwise() {
             Serial.println("Rotating 180-degree servo 1 counterclockwise.");
             break;
         case 3:
-            angle180_2 = max(0, angle180_2 - 1);  // Decrease angle for 180-degree servo 2
+            angle180_2 = max(66, angle180_2 - 1);  // Decrease angle for 180-degree servo 2
             pwm.setPWM(servo180_2, 0, map(angle180_2, 0, 180, SERVOMIN_180, SERVOMAX_180));  // Update PWM for 180-degree servo 2
             Serial.println("Rotating 180-degree servo 2 counterclockwise.");
             Serial.println(angle180_2);
@@ -344,4 +374,4 @@ void stopAllServos() {
     pwm.setPWM(servo360_1, 0, STOP1_360);
     pwm.setPWM(servo360_2, 0, STOP2_360);
     Serial.println("Stopped all servos.");
-}
+} 
